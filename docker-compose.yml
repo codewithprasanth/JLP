@@ -1,0 +1,20 @@
+# Local development only. Production uses AWS RDS + Render Key Value.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: foodapp
+      POSTGRES_PASSWORD: foodapp
+      POSTGRES_DB: foodapp
+    ports:
+      - "127.0.0.1:5433:5432" # localhost only — never expose dev DB to the LAN
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "127.0.0.1:6379:6379" # localhost only — dev Redis has no password
+
+volumes:
+  pgdata:

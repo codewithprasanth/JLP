@@ -1,0 +1,137 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: var(--brand);
+  color: #fff;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+}
+
+.topbar-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.brand {
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.logo {
+  flex: none;
+  background: #fff;
+  color: var(--brand);
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.45rem;
+  border-radius: 8px;
+}
+
+.brand-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Phones: the "JLP" mark alone, so the nav and cart keep their room. */
+@media (max-width: 560px) {
+  .brand-name {
+    display: none;
+  }
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 1.25rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.35rem 1rem;
+    margin-bottom: 0.6rem;
+  }
+
+  a {
+    color: var(--muted);
+  }
+
+  p {
+    margin: 0.2rem 0;
+  }
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  a {
+    color: rgb(255 255 255 / 85%);
+    text-decoration: none;
+    padding: 0.4rem 0.6rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+
+    &.active {
+      color: #fff;
+      background: rgb(255 255 255 / 16%);
+    }
+  }
+}
+
+.cart-link {
+  position: relative;
+  display: inline-flex;
+  color: #fff !important;
+}
+
+.badge-count {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--brand);
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: #fff;
+  padding: 0.7rem 1.1rem;
+  border-radius: 10px;
+  z-index: 2000;
+  max-width: calc(100% - 2rem);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+}
+
+.toast-error {
+  background: var(--danger);
+}

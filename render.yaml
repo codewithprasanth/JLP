@@ -1,0 +1,143 @@
+# Render Blueprint — API + Redis-compatible Key Value + two static Angular sites.
+# PostgreSQL: an existing Render Postgres in Singapore. Set DATABASE_URL to its INTERNAL URL
+# (Dashboard → database → Connections → Internal Database URL) — private network, same region.
+# Values marked `sync: false` are prompted for in the Render dashboard — never commit them.
+services:
+  - type: web
+    name: jlp-api
+    runtime: node
+    rootDir: backend
+    region: singapore # same region as the database
+    plan: starter # the free plan sleeps when idle (~50s cold start) — not acceptable for live orders
+    buildCommand: npm ci --include=dev && npm run build
+    # Runs on Render before each deploy: apply migrations, then the idempotent seed
+    # (creates the settings row + admin once; never overwrites existing data).
+    preDeployCommand: npx prisma migrate deploy && npm run db:seed
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: jlp-redis
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: OTP_HMAC_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: REFRESH_TOKEN_TTL_DAYS
+        value: "30"
+      # Notifications (Addendum 1): email via Brevo. Until BREVO_API_KEY + a verified
+      # EMAIL_FROM_ADDRESS are set, customer login answers "not available yet" (503).
+      # NOTIFICATIONS_LOG_ONLY=true prints OTPs to the Render log for YOUR OWN testing only.
+      - key: NOTIFICATION_CHANNEL
+        value: email
+      - key: EMAIL_PROVIDER
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_FROM_ADDRESS
+        sync: false
+      - key: EMAIL_FROM_NAME
+        value: Jinisha Lovely Products
+      - key: ORDER_EMAIL_STATUSES
+        value: CONFIRMED,OUT_FOR_DELIVERY,DELIVERED
+      - key: NOTIFICATIONS_LOG_ONLY
+        value: "false"
+      # MSG91 (SMS) is Phase 2 — add MSG91_* here only after DLT registration.
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      # The two static-site URLs. Enter the expected ones when prompted
+      # (https://jlp-order.onrender.com, https://jlp-admin.onrender.com) and correct
+      # them here if Render gave the sites a different name.
+      - key: CORS_ORIGIN_CUSTOMER
+        sync: false
+      - key: CORS_ORIGIN_ADMIN
+        sync: false
+      # Seed (first deploy only creates the admin; later deploys leave it untouched)
+      - key: SEED_ADMIN_USERNAME
+        value: admin
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      # Shop: Victorian View Layout, Borewell Road, Nallurhalli, Whitefield — fine-tune in admin Settings
+      - key: SEED_SHOP_LATITUDE
+        value: "12.967145"
+      - key: SEED_SHOP_LONGITUDE
+        value: "77.736177"
+      - key: SEED_DELIVERY_RADIUS_KM
+        value: "1"
+      - key: SEED_MIN_ORDER_VALUE
+        value: "100"
+
+  - type: keyvalue
+    name: jlp-redis
+    region: singapore
+    plan: free # no persistence on free: a restart only forces users to log in again
+    maxmemoryPolicy: noeviction # never silently evict OTPs / sessions
+    ipAllowList: [] # reachable only from Render services in the same region
+
+  - type: web
+    name: jlp-order
+    runtime: static
+    rootDir: customer-app
+    # API_HOST comes from the jlp-api service below; the script refuses to build without it.
+    buildCommand: npm ci && node scripts/set-api-base.mjs && npx ng build --configuration production
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: API_HOST
+        fromService:
+          type: web
+          name: jlp-api
+          property: host
+    staticPublishPath: dist/customer-app/browser
+    routes:
+      # SPA deep links: /orders/123 must serve index.html, not 404
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+
+  - type: web
+    name: jlp-admin
+    runtime: static
+    rootDir: admin-app
+    # API_HOST comes from the jlp-api service below; the script refuses to build without it.
+    buildCommand: npm ci && node scripts/set-api-base.mjs && npx ng build --configuration production
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: API_HOST
+        fromService:
+          type: web
+          name: jlp-api
+          property: host
+    staticPublishPath: dist/admin-app/browser
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex

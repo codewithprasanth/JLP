@@ -1,0 +1,44 @@
+<header class="topbar">
+  <div class="topbar-inner">
+    <a routerLink="/" class="brand" [attr.aria-label]="business.name + ' home'">
+      <span class="logo" aria-hidden="true">{{ business.shortName }}</span>
+      <span class="brand-name">{{ business.name }}</span>
+    </a>
+    <nav>
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Menu</a>
+      @if (auth.isLoggedIn()) {
+        <a routerLink="/orders" routerLinkActive="active">Orders</a>
+        <a routerLink="/profile" routerLinkActive="active">Profile</a>
+      } @else {
+        <a routerLink="/login" routerLinkActive="active">Login</a>
+      }
+      <a routerLink="/cart" class="cart-link" aria-label="Cart">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="9" cy="20" r="1.5" /><circle cx="18" cy="20" r="1.5" />
+          <path d="M2 3h3l2.6 12.4a1.5 1.5 0 0 0 1.5 1.1h8.8a1.5 1.5 0 0 0 1.5-1.1L21 7H6" />
+        </svg>
+        @if (cart.count() > 0) {
+          <span class="badge-count">{{ cart.count() }}</span>
+        }
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+  <router-outlet />
+</main>
+
+<footer class="site-footer">
+  <nav aria-label="Legal">
+    @for (l of legalLinks; track l.path) {
+      <a [routerLink]="l.path">{{ l.label }}</a>
+    }
+  </nav>
+  <p>{{ business.name }} · {{ business.address }}</p>
+  <p>FSSAI Lic. No.: {{ business.fssai ?? 'Applied for' }} · Cash on Delivery · © {{ year }} {{ business.shortName }}</p>
+</footer>
+
+@if (toast.message(); as t) {
+  <div class="toast" [class.toast-error]="t.kind === 'error'" role="status">{{ t.text }}</div>
+}

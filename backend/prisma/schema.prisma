@@ -1,0 +1,175 @@
+// Based on Developer Specification §04, with the fixes from the design review:
+//  - MenuItem.archivedAt: soft delete (order_items keep referencing archived items)
+//  - OrderStatusHistory.adminId nullable + actor: customer cancellations and the
+//    initial PLACED row can be recorded, so the status timeline is complete
+//  - Order.cancelReason, Order.updatedAt (admin polling), Order.adminViewedAt
+//    ("new orders visually distinct until first opened")
+//  - Settings is a fixed singleton row (id = 1)
+//  - The "one default address per user" partial unique index lives in a raw SQL
+//    migration because Prisma cannot express partial indexes.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+// Connection URL lives in prisma.config.ts (Prisma 7).
+datasource db {
+  provider = "postgresql"
+}
+
+// Addendum 1: email + OTP is the login. Phone is delivery-contact only — never
+// verified, not unique. It's collected at profile setup (so it's NULL for the
+// moment between first OTP and that screen) and the API requires it before ordering.
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique // always stored lower-cased
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  phone           String?
+  name            String    @default("")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  addresses       Address[]
+  orders          Order[]
+
+  @@map("users")
+}
+
+model Admin {
+  id           String               @id @default(uuid())
+  username     String               @unique
+  passwordHash String               @map("password_hash")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  statusEdits  OrderStatusHistory[]
+
+  @@map("admins")
+}
+
+model Address {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addressText String   @map("address_text")
+  latitude    Decimal  @db.Decimal(9, 6)
+  longitude   Decimal  @db.Decimal(9, 6)
+  label       String   @default("Home")
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+  orders      Order[]
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String
+  sortOrder  Int        @default(0) @map("sort_order")
+  // Soft delete: archived menu items still reference their category.
+  archivedAt DateTime?  @map("archived_at")
+  items      MenuItem[]
+
+  @@map("categories")
+}
+
+model MenuItem {
+  id                 String      @id @default(uuid())
+  categoryId         String      @map("category_id")
+  category           Category    @relation(fields: [categoryId], references: [id])
+  name               String
+  description        String?
+  price              Decimal     @db.Decimal(10, 2)
+  imageUrl           String?     @map("image_url")
+  cloudinaryPublicId String?     @map("cloudinary_public_id")
+  isAvailable        Boolean     @default(true) @map("is_available")
+  archivedAt         DateTime?   @map("archived_at")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+  orderItems         OrderItem[]
+
+  @@index([categoryId])
+  @@map("menu_items")
+}
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum StatusActor {
+  CUSTOMER
+  ADMIN
+  SYSTEM
+}
+
+model Order {
+  id                  String               @id @default(uuid())
+  userId              String               @map("user_id")
+  user                User                 @relation(fields: [userId], references: [id])
+  addressId           String?              @map("address_id")
+  address             Address?             @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  deliveryAddressText String               @map("delivery_address_text")
+  deliveryLatitude    Decimal              @db.Decimal(9, 6) @map("delivery_latitude")
+  deliveryLongitude   Decimal              @db.Decimal(9, 6) @map("delivery_longitude")
+  status              OrderStatus          @default(PLACED)
+  totalAmount         Decimal              @db.Decimal(10, 2) @map("total_amount")
+  distanceKm          Decimal              @db.Decimal(6, 2) @map("distance_km")
+  isPaid              Boolean              @default(false) @map("is_paid")
+  cancelReason        String?              @map("cancel_reason")
+  adminViewedAt       DateTime?            @map("admin_viewed_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  cancelledAt         DateTime?            @map("cancelled_at")
+  items               OrderItem[]
+  statusHistory       OrderStatusHistory[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([updatedAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id               String   @id @default(uuid())
+  orderId          String   @map("order_id")
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId       String   @map("menu_item_id")
+  menuItem         MenuItem @relation(fields: [menuItemId], references: [id])
+  itemNameSnapshot String   @map("item_name_snapshot")
+  priceSnapshot    Decimal  @db.Decimal(10, 2) @map("price_snapshot")
+  quantity         Int
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String      @map("order_id")
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor     StatusActor
+  adminId   String?     @map("admin_id")
+  admin     Admin?      @relation(fields: [adminId], references: [id])
+  status    OrderStatus
+  note      String?
+  changedAt DateTime    @default(now()) @map("changed_at")
+
+  @@index([orderId, changedAt])
+  @@map("order_status_history")
+}
+
+model Settings {
+  id                Int      @id @default(1)
+  shopLatitude      Decimal  @db.Decimal(9, 6) @map("shop_latitude")
+  shopLongitude     Decimal  @db.Decimal(9, 6) @map("shop_longitude")
+  deliveryRadiusKm  Decimal  @default(2) @db.Decimal(5, 2) @map("delivery_radius_km")
+  minOrderValue     Decimal  @default(50) @db.Decimal(10, 2) @map("min_order_value")
+  isAcceptingOrders Boolean  @default(true) @map("is_accepting_orders")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
