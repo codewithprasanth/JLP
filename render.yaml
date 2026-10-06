@@ -1,6 +1,7 @@
 # Render Blueprint — API + Redis-compatible Key Value + two static Angular sites.
-# PostgreSQL: an existing Render Postgres in Singapore. Set DATABASE_URL to its INTERNAL URL
-# (Dashboard → database → Connections → Internal Database URL) — private network, same region.
+# Everything runs on Render's FREE tier, in Singapore, including a new Postgres database.
+# Free-tier limits: the database expires 30 days after creation (upgrade before going live);
+# the API sleeps after 15 min idle — keep it awake with an UptimeRobot ping to /health.
 # Values marked `sync: false` are prompted for in the Render dashboard — never commit them.
 services:
   - type: web
@@ -8,12 +9,12 @@ services:
     runtime: node
     rootDir: backend
     region: singapore # same region as the database
-    plan: starter # the free plan sleeps when idle (~50s cold start) — not acceptable for live orders
+    plan: free # sleeps after 15 min without traffic; an UptimeRobot ping every 5 min keeps it awake
     buildCommand: npm ci --include=dev && npm run build
-    # Runs on Render before each deploy: apply migrations, then the idempotent seed
-    # (creates the settings row + admin once; never overwrites existing data).
-    preDeployCommand: npx prisma migrate deploy && npm run db:seed
-    startCommand: npm start
+    # Free plan has no pre-deploy step, so migrations + the idempotent seed run at startup.
+    # Both are safe to repeat: migrate applies only new migrations; the seed only creates
+    # the settings row and admin if they're missing and never overwrites data.
+    startCommand: npx prisma migrate deploy && npm run db:seed && npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
@@ -23,7 +24,9 @@ services:
       - key: TRUST_PROXY
         value: "1"
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: jlp-db
+          property: connectionString # internal URL — private network, same region
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -141,3 +144,12 @@ services:
       - path: /*
         name: X-Robots-Tag
         value: noindex
+
+databases:
+  - name: jlp-db
+    databaseName: jlp
+    user: jlp
+    plan: free # expires 30 days after creation — upgrade before real customers depend on it
+    region: singapore
+    postgresMajorVersion: "17"
+    ipAllowList: [] # no public access; only Render services in this region can connect

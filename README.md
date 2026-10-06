@@ -118,19 +118,16 @@ replace and delete against the real Cloudinary account.
 
 ## Deploy (Render, Singapore)
 
-`render.yaml` is a Render Blueprint for the API, the Key Value store, and both static sites.
-The database is an existing **Render Postgres** in Singapore (it replaces AWS RDS from the spec,
-so there's no cross-cloud networking or outbound-IP allowlist). Steps:
+`render.yaml` is a Render Blueprint that creates everything on the **free tier** in Singapore:
+API (`jlp-api`), Key Value (`jlp-redis`), Postgres (`jlp-db`), and the two static sites (`jlp-order`, `jlp-admin`).
 
-1. Apply the blueprint. When prompted, set:
-   - `DATABASE_URL`: the database's **Internal** Database URL (not the external one)
-   - `SEED_ADMIN_PASSWORD`: the generated production password (16+ chars)
-   - `BREVO_API_KEY`, `EMAIL_FROM_ADDRESS` (a verified Brevo sender), `EMAIL_FROM_NAME` (the restaurant name)
-   - `SEED_SHOP_LATITUDE` / `SEED_SHOP_LONGITUDE`: the shop location (it can also be changed later in admin Settings)
-2. Every deploy runs `prisma migrate deploy && npm run db:seed` on Render. The seed is idempotent: it creates
-   the settings row and the admin only if they're missing, and in production it never adds demo dishes.
-3. Set `apiBase` in `*/src/environments/environment.prod.ts` to the API URL, and set the API's
-   `CORS_ORIGIN_CUSTOMER` / `CORS_ORIGIN_ADMIN` to the two static-site URLs.
+1. Render → New → Blueprint → pick this repo. When prompted, set `SEED_ADMIN_PASSWORD` (16+ chars), the Brevo and
+   Cloudinary values, and `CORS_ORIGIN_CUSTOMER` / `CORS_ORIGIN_ADMIN` (the two static-site URLs).
+   The database URL, Redis URL, secrets and the sites' API address are wired automatically.
+2. Migrations and the idempotent seed run at API startup (the free plan has no pre-deploy step).
+3. Free-tier limits: the API sleeps after 15 min idle, so ping `/health` every 5 min (e.g. UptimeRobot). The free
+   database **expires 30 days after creation**, so upgrade it before real customers depend on it. One free
+   database per account.
 
 You can't run migrations from a corporate network that proxies traffic (e.g. Netskope): it resets
 PostgreSQL's TLS handshake. That's why migrations run on Render instead.
@@ -142,7 +139,6 @@ default statuses that's ~800/day, so plan for a paid tier or a shorter `ORDER_EM
 **SMS (Phase 2):** after DLT approval, implement phone-based login, add `MSG91_*`, and set `NOTIFICATION_CHANNEL=sms`.
 MSG91 template variables: OTP `##otp##`; order `##order_id##`, `##status##`.
 
-The API is on the `starter` plan on purpose: the free plan sleeps, and the first order after idle would take about 50 seconds.
 
 ## Still open (business / legal)
 
